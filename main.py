@@ -7,13 +7,11 @@ import uuid
 import os
 from datetime import datetime
 
-# DEBUG ENV
 print("=== DEBUG ENV VARS ===")
 print("APS_APP_ID      :", os.getenv('APS_APP_ID') or "MISSING")
 print("APS_APP_SECRET  :", (os.getenv('APS_APP_SECRET') or "MISSING")[:6] + "..." if os.getenv('APS_APP_SECRET') else "MISSING")
 print("PVO_API_KEY     :", (os.getenv('PVO_API_KEY') or "MISSING")[:6] + "..." if os.getenv('PVO_API_KEY') else "MISSING")
 print("PVO_SYSTEM_ID   :", os.getenv('PVO_SYSTEM_ID') or "MISSING")
-print("All env keys    :", list(os.environ.keys()))
 print("=====================\n")
 
 SYSTEM_SID = 'D24C931099345673'
@@ -48,56 +46,60 @@ def get_headers(path, method='GET'):
         'Content-Type': 'application/json'
     }
 
-def test_endpoint(path, label=""):
+def test_endpoint(path, label):
     url = BASE_URL + path
     headers = get_headers(path)
     try:
-        print(f"{label} - Test : {url}")
+        print(f"{label} → {url}")
         r = requests.get(url, headers=headers, timeout=15)
-        print(f"{label} - Status : {r.status_code}")
+        print(f"Status : {r.status_code}")
         if r.status_code != 200:
-            print(f"{label} - Réponse non-JSON ou erreur : {r.text}")
+            print("Réponse non-JSON :", r.text[:200])
             return None
         data = r.json()
-        print(f"{label} - Réponse complète :", data)
+        print("Réponse :", data)
         if data.get('code') == 0:
-            print(f"{label} - Succès ! Data :", data.get('data'))
-            return data
+            print(f"SUCCÈS {label} ! Data :", data.get('data'))
+            return data['data']
         else:
-            print(f"{label} - Erreur :", data.get('msg') or data.get('message') or data)
+            print(f"Erreur {label} :", data.get('msg') or data)
     except Exception as e:
-        print(f"{label} - Erreur requête :", str(e))
+        print(f"Erreur {label} :", str(e))
     return None
 
-def get_realtime_power():
-    path = f'/ecu/{ECU_ID}/realtime'
-    data = test_endpoint(path, "Realtime ECU")
-    if data and data.get('code') == 0:
-        power = data['data'].get('power') or data['data'].get('current_power') or data['data'].get('power_now')
-        if power is not None:
-            print(f"Power actuelle trouvée : {power} W")
+def try_get_power():
+    # Tentative 1 : endpoint basique ECU status (souvent accessible en Lv0)
+    data = test_endpoint(f'/ecu/{ECU_ID}', "ECU Status")
+    if data:
+        power = data.get('power') or data.get('current_power') or data.get('output_power')
+        if power:
+            print(f"Power trouvée : {power} W")
             return float(power)
+
+    # Tentative 2 : realtime global (rare mais parfois OK)
+    data = test_endpoint('/systems/realtime', "Realtime global")
+    if data:
+        power = data.get('power') or data.get('current_power')
+        if power:
+            print(f"Power globale trouvée : {power} W")
+            return float(power)
+
+    print("Aucune puissance récupérée")
     return None
 
-def test_list():
-    path = '/user/api/v2/ecu/list'  # ou '/user/api/v2/systems' si ça change
-    data = test_endpoint(path, "Liste ECU/Systèmes")
-    if data and data.get('code') == 0:
-        print("Systèmes/ECU visibles :", data.get('data'))
-
-def push_current_power(power_w):
+def push_to_pvoutput(power_w):
     if power_w is None:
-        print("Aucune puissance → skip push")
+        print("Skip push : pas de puissance")
         return
     date_str = datetime.now().strftime('%Y%m%d')
     time_str = datetime.now().strftime('%H:%M')
-    url = 'https://pvoutput.org/service/r2/addstatus.jsp'  # addstatus pour live data (pas addoutput)
+    url = 'https://pvoutput.org/service/r2/addstatus.jsp'
     params = {
         'd': date_str,
         't': time_str,
-        'v2': int(power_w),  # Peak Power (on utilise pour puissance actuelle)
-        'c1': 0,             # Energy Generation = 0 (pas de daily)
-        'm': 'Current power from EMA realtime (Lv0)'
+        'v2': int(power_w),  # Puissance actuelle comme Peak Power
+        'c1': 0,             # Pas d'énergie journalière
+        'm': 'Puissance instantanée Lv0 (test)'
     }
     headers = {
         'X-Pvoutput-Apikey': PVO_API_KEY,
@@ -106,17 +108,18 @@ def push_current_power(power_w):
     }
     try:
         r = requests.post(url, data=params, headers=headers)
-        print("PVOutput addstatus réponse :", r.text.strip())
+        print("PVOutput réponse :", r.text.strip())
         if "OK" in r.text.upper():
-            print("Push puissance actuelle réussi !")
+            print("Push puissance actuelle OK !")
         else:
-            print("Échec push puissance")
+            print("Échec push")
     except Exception as e:
-        print("Erreur push puissance :", str(e))
+        print("Erreur push :", str(e))
 
 if __name__ == '__main__':
-    print("Démarrage - Mode Lv0 limité")
-    test_list()                # Voir si on voit au moins notre ECU
-    power = get_realtime_power()  # Essayer de récupérer la puissance live
-    push_current_power(power)
-    print("Fin exécution")
+    print("Démarrage - Test Lv0 limité (power realtime & list)")
+    test_endpoint('/user/api/v2/ecu/list', "Liste ECU")
+    test_endpoint('/ecu/status', "ECU Status simple")
+    power = try_get_power()
+    push_to_pvoutput(power)
+    print("Fin")
