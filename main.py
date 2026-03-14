@@ -50,7 +50,7 @@ def get_headers(path, method='GET'):
     }
 
 def test_api_list():
-    path = '/user/api/v2/systems'  # Liste tous les systèmes visibles pour cet App ID
+    path = '/ecu/list' # Liste tous les systèmes visibles pour cet App ID
     url = BASE_URL + path
     headers = get_headers(path)
     try:
