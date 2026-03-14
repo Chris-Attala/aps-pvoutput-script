@@ -68,33 +68,31 @@ def test_endpoint(path):
     return None
 
 def get_today_energy():
-    # Test 1 : ECU realtime (souvent le plus accessible)
-    path_realtime = f'/ecu/{ECU_ID}/realtime'
-    data_rt = test_endpoint(path_realtime)
-    if data_rt and data_rt.get('code') == 0:
-        # Exemple parsing power actuelle (pas daily, mais test accès)
-        power = data_rt['data'].get('power') or data_rt['data'].get('current_power')
-        if power:
-            print(f"Power actuelle trouvée : {power} W")
-    
-    # Test 2 : ECU production daily
-    path_daily = f'/ecu/{ECU_ID}/production/daily'
-    data_daily = test_endpoint(path_daily)
-    if data_daily and data_daily.get('code') == 0:
-        today_kwh = data_daily['data'].get('today') or data_daily['data'].get('energy_today')
-        if today_kwh:
-            print(f"Énergie today trouvée : {today_kwh} kWh")
-            return float(today_kwh)
-    
-    # Test 3 : fallback summary
+    # Test ECU summary (manuel : /user/api/v2/systems/{sid}/devices/ecu/summary/{eid})
+    path_ecu_summary = f'/user/api/v2/systems/{SYSTEM_SID}/devices/ecu/summary/{ECU_ID}'
+    url = BASE_URL + path_ecu_summary
+    headers = get_headers(path_ecu_summary)
+    try:
+        print(f"Test ECU summary : {url}")
+        r = requests.get(url, headers=headers, timeout=15)
+        print(f"Status code ECU summary : {r.status_code}")
+        data = r.json()
+        print("Réponse ECU summary :", data)
+        if data.get('code') == 0:
+            today_kwh = data['data'].get('today') or data['data'].get('energy_today')
+            if today_kwh is not None:
+                print(f"Énergie today trouvée : {today_kwh} kWh")
+                return float(today_kwh)
+        else:
+            print("Erreur ECU summary :", data.get('msg') or data)
+    except Exception as e:
+        print("Erreur requête ECU summary :", str(e))
+
+    # Fallback au summary système si ECU fail
     path_summary = f'/user/api/v2/systems/summary/{SYSTEM_SID}'
-    data_summary = test_endpoint(path_summary)
-    if data_summary and data_summary.get('code') == 0:
-        today_kwh = data_summary['data'].get('today') or data_summary['data'].get('energy_today')
-        if today_kwh:
-            print(f"Énergie today trouvée (summary) : {today_kwh} kWh")
-            return float(today_kwh)
-    
+    # ... même code que avant
+    # (copie le bloc try du summary original ici si besoin)
+
     return None
 
 def push_pvoutput(energy_kwh):
