@@ -32,7 +32,7 @@ if not APP_ID or not APP_SECRET:
     print("ERREUR : APP_ID ou APP_SECRET manquant ! Arrêt.")
     exit(1)
 
-BASE_URL = 'https://openapi.apsystems.com'
+BASE_URL = 'https://api.apsystemsema.com:9282'
 
 def generate_signature(method, path, timestamp, nonce):
     string_to_sign = f"{timestamp}/{nonce}/{APP_ID}/{path}/{method.upper()}/HmacSHA256"
