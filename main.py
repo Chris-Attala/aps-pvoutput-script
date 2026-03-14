@@ -16,7 +16,7 @@ print("PVO_SYSTEM_ID   :", os.getenv('PVO_SYSTEM_ID') or "MISSING")
 print("All env keys    :", list(os.environ.keys()))
 print("=====================\n")
 
-# Fixes
+# Variables fixes
 SYSTEM_SID = 'D24C931099345673'
 ECU_ID = '215000085900'
 
@@ -49,33 +49,32 @@ def get_headers(path, method='GET'):
         'Content-Type': 'application/json'
     }
 
-def test_endpoint(path):
+def test_api_list():
+    path = '/user/api/v2/systems'  # Liste tous les systèmes visibles pour cet App ID
     url = BASE_URL + path
     headers = get_headers(path)
     try:
-        print(f"Test endpoint : {url}")
+        print(f"Test list systèmes : {url}")
         r = requests.get(url, headers=headers, timeout=15)
-        print(f"Status code : {r.status_code}")
+        print(f"Status list : {r.status_code}")
         data = r.json()
-        print("Réponse complète :", data)
+        print("Réponse list complète :", data)
         if data.get('code') == 0:
-            print("Succès ! Data :", data.get('data'))
-            return data
+            print("Systèmes visibles :", data.get('data'))
         else:
-            print("Erreur :", data.get('msg') or data.get('message') or data)
+            print("Erreur list :", data.get('msg') or data)
     except Exception as e:
-        print("Erreur requête :", str(e))
-    return None
+        print("Erreur list :", str(e))
 
 def get_today_energy():
-    # Test ECU summary (manuel : /user/api/v2/systems/{sid}/devices/ecu/summary/{eid})
+    # Test 1 : ECU summary (le plus prometteur du manuel)
     path_ecu_summary = f'/user/api/v2/systems/{SYSTEM_SID}/devices/ecu/summary/{ECU_ID}'
     url = BASE_URL + path_ecu_summary
     headers = get_headers(path_ecu_summary)
     try:
         print(f"Test ECU summary : {url}")
         r = requests.get(url, headers=headers, timeout=15)
-        print(f"Status code ECU summary : {r.status_code}")
+        print(f"Status ECU summary : {r.status_code}")
         data = r.json()
         print("Réponse ECU summary :", data)
         if data.get('code') == 0:
@@ -86,14 +85,26 @@ def get_today_energy():
         else:
             print("Erreur ECU summary :", data.get('msg') or data)
     except Exception as e:
-        print("Erreur requête ECU summary :", str(e))
+        print("Erreur ECU summary :", str(e))
 
-    # Fallback au summary système si ECU fail
-    path_summary = f'/user/api/v2/systems/summary/{SYSTEM_SID}'
-    # ... même code que avant
-    # (copie le bloc try du summary original ici si besoin)
+    # Test 2 : Realtime ECU (souvent accessible même en Lv0)
+    path_realtime = f'/ecu/{ECU_ID}/realtime'
+    url_rt = BASE_URL + path_realtime
+    headers_rt = get_headers(path_realtime)
+    try:
+        print(f"Test realtime ECU : {url_rt}")
+        r = requests.get(url_rt, headers=headers_rt, timeout=15)
+        print(f"Status realtime : {r.status_code}")
+        data_rt = r.json()
+        print("Réponse realtime :", data_rt)
+        if data_rt.get('code') == 0:
+            power = data_rt['data'].get('power') or data_rt['data'].get('current_power')
+            if power:
+                print(f"Power actuelle : {power} W")
+    except Exception as e:
+        print("Erreur realtime :", str(e))
 
-    return None
+    return None  # On n'a pas encore la daily, on arrête là pour ce test
 
 def push_pvoutput(energy_kwh):
     if energy_kwh is None:
@@ -120,6 +131,7 @@ def push_pvoutput(energy_kwh):
 
 if __name__ == '__main__':
     print("Démarrage")
+    test_api_list()  # Vérifie quels systèmes/ECU sont visibles
     energy = get_today_energy()
     push_pvoutput(energy)
     print("Fin")
